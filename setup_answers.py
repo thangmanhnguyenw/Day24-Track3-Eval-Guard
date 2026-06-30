@@ -106,6 +106,12 @@ def main():
     print("LAB 24 SETUP — Generating answers for 50 questions")
     print("=" * 60)
 
+    # Warm-up torch/transformers TRƯỚC pypdf + underthesea (fix crash 0xC0000005 trên Windows).
+    print("Khởi tạo model embedding (warm-up)...")
+    from src.m2_search import warmup_embedding
+    warmup_embedding()
+    print("✓ Embedding sẵn sàng")
+
     if not check_day18_files():
         sys.exit(1)
 

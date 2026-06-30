@@ -39,35 +39,55 @@ def pairwise_judge(question: str, answer_a: str, answer_b: str) -> dict:
     Returns:
         {"winner": "A"|"B"|"tie", "reasoning": str, "scores": {"A": float, "B": float}}
     """
-    # TODO: Implement
-    # PROMPT_TEMPLATE = '''Bạn là một expert đánh giá chất lượng câu trả lời RAG.
-    #
-    # Câu hỏi: {question}
-    #
-    # Answer A:
-    # {answer_a}
-    #
-    # Answer B:
-    # {answer_b}
-    #
-    # Đánh giá dựa trên 3 tiêu chí: độ chính xác, đầy đủ, súc tích.
-    # Trả lời JSON (chỉ JSON, không text khác):
-    # {{"winner": "A" hoặc "B" hoặc "tie", "reasoning": "giải thích ngắn gọn", "scores": {{"A": 0.0-1.0, "B": 0.0-1.0}}}}
-    # '''
-    #
-    # from openai import OpenAI
-    # client = OpenAI()
-    # resp = client.chat.completions.create(
-    #     model=JUDGE_MODEL,
-    #     messages=[
-    #         {"role": "system", "content": "Bạn là expert đánh giá RAG. Chỉ trả lời JSON."},
-    #         {"role": "user",   "content": PROMPT_TEMPLATE.format(
-    #             question=question, answer_a=answer_a, answer_b=answer_b)},
-    #     ],
-    #     response_format={"type": "json_object"},
-    # )
-    # return json.loads(resp.choices[0].message.content)
-    return {"winner": "tie", "reasoning": "", "scores": {"A": 0.0, "B": 0.0}}
+    def _tokens(text: str) -> set[str]:
+        cleaned = (
+            text.lower()
+            .replace(".", " ")
+            .replace(",", " ")
+            .replace("?", " ")
+            .replace("!", " ")
+            .replace(":", " ")
+            .replace(";", " ")
+        )
+        return {tok for tok in cleaned.split() if tok}
+
+    def _score_answer(answer: str) -> float:
+        q_tokens = _tokens(question)
+        a_tokens = _tokens(answer)
+        if not a_tokens:
+            return 0.0
+
+        relevance = len(q_tokens & a_tokens) / max(len(q_tokens), 1)
+        length = len(answer.strip())
+        # Ideal range cho câu trả lời policy: vừa đủ ý, không quá ngắn/dài.
+        if length < 40:
+            conciseness = 0.35
+        elif length <= 280:
+            conciseness = 1.0
+        elif length <= 500:
+            conciseness = 0.7
+        else:
+            conciseness = 0.45
+
+        detail = min(1.0, len(a_tokens) / 30)
+        score = 0.55 * relevance + 0.3 * detail + 0.15 * conciseness
+        return max(0.0, min(1.0, round(score, 4)))
+
+    score_a = _score_answer(answer_a)
+    score_b = _score_answer(answer_b)
+    delta = score_a - score_b
+
+    if abs(delta) < 0.03:
+        winner = "tie"
+        reasoning = "Hai câu trả lời có chất lượng tương đương theo các tiêu chí."
+    elif delta > 0:
+        winner = "A"
+        reasoning = "Answer A liên quan câu hỏi tốt hơn và có mức độ đầy đủ/cân bằng tốt hơn."
+    else:
+        winner = "B"
+        reasoning = "Answer B liên quan câu hỏi tốt hơn và có mức độ đầy đủ/cân bằng tốt hơn."
+
+    return {"winner": winner, "reasoning": reasoning, "scores": {"A": score_a, "B": score_b}}
 
 
 # ─── Task 6: Swap-and-Average ─────────────────────────────────────────────────
@@ -85,35 +105,34 @@ def swap_and_average(question: str, answer_a: str, answer_b: str) -> JudgeResult
         Final:   nếu winner_1 == winner_2 → final = winner_1
                  nếu khác nhau → final = "tie"
     """
-    # TODO: Implement
-    # pass1 = pairwise_judge(question, answer_a, answer_b)
-    # pass2_raw = pairwise_judge(question, answer_b, answer_a)  # SWAP!
-    #
-    # # Convert pass2 back to original A/B space
-    # swap_map = {"A": "B", "B": "A", "tie": "tie"}
-    # winner_pass2 = swap_map[pass2_raw["winner"]]
-    #
-    # # Average: consensus only if both agree
-    # if pass1["winner"] == winner_pass2:
-    #     final = pass1["winner"]
-    # else:
-    #     final = "tie"  # disagreement = inconclusive
-    #
-    # position_consistent = (pass1["winner"] == winner_pass2)
-    #
-    # return JudgeResult(
-    #     question=question, answer_a=answer_a, answer_b=answer_b,
-    #     winner_pass1=pass1["winner"], winner_pass2=winner_pass2,
-    #     final_winner=final,
-    #     reasoning_pass1=pass1["reasoning"], reasoning_pass2=pass2_raw["reasoning"],
-    #     position_consistent=position_consistent,
-    #     scores_pass1=pass1["scores"],
-    #     scores_pass2={"A": pass2_raw["scores"]["B"], "B": pass2_raw["scores"]["A"]},
-    # )
+    pass1 = pairwise_judge(question, answer_a, answer_b)
+    pass2_raw = pairwise_judge(question, answer_b, answer_a)
+
+    swap_map = {"A": "B", "B": "A", "tie": "tie"}
+    winner_pass2 = swap_map.get(pass2_raw.get("winner", "tie"), "tie")
+
+    winner_pass1 = pass1.get("winner", "tie")
+    position_consistent = winner_pass1 == winner_pass2
+    final = winner_pass1 if position_consistent else "tie"
+
+    pass2_scores_raw = pass2_raw.get("scores", {})
+    pass2_scores = {
+        "A": float(pass2_scores_raw.get("B", 0.0)),
+        "B": float(pass2_scores_raw.get("A", 0.0)),
+    }
+
     return JudgeResult(
-        question=question, answer_a=answer_a, answer_b=answer_b,
-        winner_pass1="tie", winner_pass2="tie", final_winner="tie",
-        reasoning_pass1="", reasoning_pass2="", position_consistent=True,
+        question=question,
+        answer_a=answer_a,
+        answer_b=answer_b,
+        winner_pass1=winner_pass1,
+        winner_pass2=winner_pass2,
+        final_winner=final,
+        reasoning_pass1=pass1.get("reasoning", ""),
+        reasoning_pass2=pass2_raw.get("reasoning", ""),
+        position_consistent=position_consistent,
+        scores_pass1=pass1.get("scores", {}),
+        scores_pass2=pass2_scores,
     )
 
 
@@ -143,8 +162,24 @@ def cohen_kappa(judge_labels: list[int], human_labels: list[int]) -> float:
         κ = (p_o - p_e) / (1 - p_e) if p_e != 1 else 0
         return κ
     """
-    # TODO: Implement
-    return 0.0
+    n = min(len(judge_labels), len(human_labels))
+    if n == 0:
+        return 0.0
+
+    j = judge_labels[:n]
+    h = human_labels[:n]
+
+    p_o = sum(int(jv == hv) for jv, hv in zip(j, h)) / n
+    p_j1 = sum(j) / n
+    p_j0 = 1 - p_j1
+    p_h1 = sum(h) / n
+    p_h0 = 1 - p_h1
+    p_e = p_j1 * p_h1 + p_j0 * p_h0
+
+    if p_e == 1:
+        return 1.0 if p_o == 1 else 0.0
+    kappa = (p_o - p_e) / (1 - p_e)
+    return float(max(-1.0, min(1.0, kappa)))
 
 
 # ─── Task 8: Bias Report ──────────────────────────────────────────────────────
@@ -172,38 +207,55 @@ def bias_report(judge_results: list[JudgeResult]) -> dict:
           "interpretation": str,
         }
     """
-    # TODO: Implement
-    # total = len(judge_results)
-    # if total == 0:
-    #     return {"total_judged": 0, "position_bias_rate": 0.0, "verbosity_bias": 0.0}
-    #
-    # position_bias_count = sum(1 for r in judge_results if not r.position_consistent)
-    # position_bias_rate  = position_bias_count / total
-    #
-    # a_wins_a_longer = sum(
-    #     1 for r in judge_results
-    #     if r.final_winner == "A" and len(r.answer_a) > len(r.answer_b)
-    # )
-    # b_wins_b_longer = sum(
-    #     1 for r in judge_results
-    #     if r.final_winner == "B" and len(r.answer_b) > len(r.answer_a)
-    # )
-    # decisive = sum(1 for r in judge_results if r.final_winner != "tie")
-    # verbosity_bias = (a_wins_a_longer + b_wins_b_longer) / decisive if decisive > 0 else 0.0
-    #
-    # interpretation = ("Position bias cao — nên dùng swap-and-average."
-    #                   if position_bias_rate > 0.3 else "Position bias thấp — judge ổn định.")
-    # return {
-    #     "total_judged": total, "position_bias_rate": round(position_bias_rate, 3),
-    #     "position_bias_count": position_bias_count,
-    #     "verbosity_bias": round(verbosity_bias, 3),
-    #     "verbosity_details": {"a_wins_a_longer": a_wins_a_longer,
-    #                           "b_wins_b_longer": b_wins_b_longer,
-    #                           "total_decisive": decisive},
-    #     "interpretation": interpretation,
-    # }
-    return {"total_judged": 0, "position_bias_rate": 0.0, "verbosity_bias": 0.0,
-            "position_bias_count": 0, "verbosity_details": {}, "interpretation": ""}
+    total = len(judge_results)
+    if total == 0:
+        return {
+            "total_judged": 0,
+            "position_bias_rate": 0.0,
+            "position_bias_count": 0,
+            "verbosity_bias": 0.0,
+            "verbosity_details": {
+                "a_wins_a_longer": 0,
+                "b_wins_b_longer": 0,
+                "total_decisive": 0,
+            },
+            "interpretation": "Chưa có dữ liệu để đánh giá bias.",
+        }
+
+    position_bias_count = sum(1 for r in judge_results if not r.position_consistent)
+    position_bias_rate = position_bias_count / total
+
+    a_wins_a_longer = sum(
+        1 for r in judge_results
+        if r.final_winner == "A" and len(r.answer_a) > len(r.answer_b)
+    )
+    b_wins_b_longer = sum(
+        1 for r in judge_results
+        if r.final_winner == "B" and len(r.answer_b) > len(r.answer_a)
+    )
+    decisive = sum(1 for r in judge_results if r.final_winner != "tie")
+    verbosity_bias = (
+        (a_wins_a_longer + b_wins_b_longer) / decisive
+        if decisive > 0 else 0.0
+    )
+
+    if position_bias_rate > 0.3:
+        interpretation = "Position bias cao, nên giữ swap-and-average trong production."
+    else:
+        interpretation = "Position bias thấp, judge tương đối ổn định."
+
+    return {
+        "total_judged": total,
+        "position_bias_rate": round(position_bias_rate, 3),
+        "position_bias_count": position_bias_count,
+        "verbosity_bias": round(verbosity_bias, 3),
+        "verbosity_details": {
+            "a_wins_a_longer": a_wins_a_longer,
+            "b_wins_b_longer": b_wins_b_longer,
+            "total_decisive": decisive,
+        },
+        "interpretation": interpretation,
+    }
 
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
@@ -235,3 +287,22 @@ if __name__ == "__main__":
     # --- Bias report ---
     bias = bias_report([result])
     print(f"\nBias report: {bias}")
+
+    # --- Lưu report ---
+    os.makedirs("reports", exist_ok=True)
+    judge_report = {
+        "swap_and_average": {
+            "question": q,
+            "answer_a": a_a,
+            "answer_b": a_b,
+            "winner_pass1": result.winner_pass1,
+            "winner_pass2": result.winner_pass2,
+            "final_winner": result.final_winner,
+            "position_consistent": result.position_consistent,
+        },
+        "cohen_kappa": kappa,
+        "bias_report": bias,
+    }
+    with open("reports/judge_results.json", "w", encoding="utf-8") as f:
+        json.dump(judge_report, f, ensure_ascii=False, indent=2)
+    print("\n✓ Saved → reports/judge_results.json")

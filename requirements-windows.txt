@@ -1,0 +1,26 @@
+# Windows-friendly requirements (không cài nemoguardrails → tránh build annoy cần C++).
+# Phase C vẫn chạy được nhờ fallback rule-based trong phase_c_guard.py.
+
+# Day 18
+pypdf>=4.0
+python-dotenv>=1.0
+underthesea>=6.8
+rank-bm25>=0.2.2
+qdrant-client>=1.9
+sentence-transformers>=3.0
+flashrank>=0.2
+ragas>=0.1.10,<0.2
+langchain-community>=0.2,<0.3
+langchain-openai>=0.1,<0.2
+datasets>=2.19
+openai>=1.30
+
+# Day 24
+scipy>=1.11
+presidio-analyzer>=2.2
+presidio-anonymizer>=2.2
+spacy>=3.7
+pytest>=8.0
+
+# Sau khi cài:
+#   python -m spacy download en_core_web_lg

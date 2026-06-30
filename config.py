@@ -3,11 +3,32 @@
 import os
 from dotenv import load_dotenv
 
+# Tránh crash 0xC0000005 (access violation) do xung đột OpenMP giữa
+# torch / numpy(MKL) / onnxruntime trên Windows khi load model embedding.
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+# In UTF-8 ra console Windows (cp1252 không in được ký tự ✓ tiếng Việt).
+os.environ.setdefault("PYTHONUTF8", "1")
+os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+
 load_dotenv()
+
+# --- HuggingFace cache ---
+HF_HOME = os.getenv("HF_HOME", "")
+if HF_HOME:
+    os.environ["HF_HOME"] = HF_HOME
+    os.environ["HUGGINGFACE_HUB_CACHE"] = os.path.join(HF_HOME, "hub")
 
 # --- API Keys ---
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")
 HF_TOKEN = os.getenv("HF_TOKEN", "")  # Optional: for HuggingFace models
+
+LLM_API_KEY = OPENAI_API_KEY or GEMINI_API_KEY
+_default_base_url = (
+    "https://api.openai.com/v1" if OPENAI_API_KEY else "https://ai-gateway.antco.ai/v1"
+)
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", _default_base_url)
+LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
 
 # --- Qdrant (same as Day 18) ---
 QDRANT_HOST = "localhost"

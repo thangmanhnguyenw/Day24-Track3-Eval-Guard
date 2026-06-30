@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab 24 — Eval + Guardrail Stack | Hướng dẫn</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: #1a2332;
+      --surface2: #243044;
+      --border: #2d3a4f;
+      --text: #e7ecf3;
+      --muted: #8b9cb3;
+      --accent: #3b82f6;
+      --accent2: #8b5cf6;
+      --green: #22c55e;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --cyan: #06b6d4;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      padding: 2rem 1rem 4rem;
+    }
+    .container { max-width: 960px; margin: 0 auto; }
+    header {
+      text-align: center;
+      padding: 2.5rem 1rem 2rem;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 2.5rem;
+    }
+    header h1 {
+      font-size: 1.85rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 0.5rem;
+    }
+    header p { color: var(--muted); font-size: 1.05rem; }
+    .badge-row { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; margin-top: 1rem; }
+    .badge {
+      font-size: 0.75rem;
+      padding: 0.25rem 0.65rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+    }
+    section { margin-bottom: 2.5rem; }
+    h2 {
+      font-size: 1.25rem;
+      color: var(--text);
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid var(--accent);
+      display: inline-block;
+    }
+    h3 { font-size: 1rem; color: var(--cyan); margin: 1.25rem 0 0.6rem; }
+    p, li { color: var(--muted); }
+    p { margin-bottom: 0.75rem; }
+    ul, ol { padding-left: 1.4rem; margin-bottom: 1rem; }
+    li { margin-bottom: 0.35rem; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1rem;
+    }
+    .card.highlight { border-color: var(--accent); }
+    .card.phase-a { border-left: 4px solid var(--accent); }
+    .card.phase-b { border-left: 4px solid var(--accent2); }
+    .card.phase-c { border-left: 4px solid var(--green); }
+    .flow {
+      background: var(--surface2);
+      border-radius: 10px;
+      padding: 1.25rem;
+      font-family: "Cascadia Code", "Consolas", monospace;
+      font-size: 0.82rem;
+      line-height: 1.7;
+      overflow-x: auto;
+      white-space: pre;
+      color: #a8c0e0;
+      margin: 1rem 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      margin: 1rem 0;
+    }
+    th, td {
+      padding: 0.6rem 0.85rem;
+      text-align: left;
+      border: 1px solid var(--border);
+    }
+    th { background: var(--surface2); color: var(--text); font-weight: 600; }
+    td { color: var(--muted); }
+    tr:hover td { background: rgba(59,130,246,0.05); }
+    code {
+      font-family: "Cascadia Code", "Consolas", monospace;
+      font-size: 0.85em;
+      background: var(--surface2);
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      color: var(--cyan);
+    }
+    .task-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    .task-item {
+      background: var(--surface2);
+      border-radius: 8px;
+      padding: 1rem;
+      border: 1px solid var(--border);
+    }
+    .task-item .num {
+      display: inline-block;
+      width: 1.6rem;
+      height: 1.6rem;
+      line-height: 1.6rem;
+      text-align: center;
+      background: var(--accent);
+      color: white;
+      border-radius: 50%;
+      font-size: 0.75rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+    .task-item h4 { font-size: 0.9rem; color: var(--text); margin-bottom: 0.35rem; }
+    .task-item p { font-size: 0.82rem; margin: 0; }
+    .status-todo { color: var(--amber); }
+    .status-done { color: var(--green); }
+    .steps { counter-reset: step; list-style: none; padding: 0; }
+    .steps li {
+      counter-increment: step;
+      position: relative;
+      padding: 0.85rem 1rem 0.85rem 3rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 0.6rem;
+    }
+    .steps li::before {
+      content: counter(step);
+      position: absolute;
+      left: 0.85rem;
+      top: 0.85rem;
+      width: 1.5rem;
+      height: 1.5rem;
+      background: var(--accent2);
+      color: white;
+      border-radius: 50%;
+      font-size: 0.75rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .score-bar {
+      display: flex;
+      height: 8px;
+      border-radius: 4px;
+      overflow: hidden;
+      margin: 0.75rem 0;
+    }
+    .score-bar span:nth-child(1) { background: var(--accent); flex: 30; }
+    .score-bar span:nth-child(2) { background: var(--accent2); flex: 35; }
+    .score-bar span:nth-child(3) { background: var(--green); flex: 35; }
+    .legend { display: flex; gap: 1.5rem; flex-wrap: wrap; font-size: 0.8rem; margin-top: 0.5rem; }
+    .legend span::before {
+      content: "";
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      margin-right: 0.4rem;
+      vertical-align: middle;
+    }
+    .legend .a::before { background: var(--accent); }
+    .legend .b::before { background: var(--accent2); }
+    .legend .c::before { background: var(--green); }
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      padding-top: 2rem;
+      border-top: 1px solid var(--border);
+    }
+    .warn {
+      background: rgba(245,158,11,0.1);
+      border: 1px solid rgba(245,158,11,0.3);
+      border-radius: 8px;
+      padding: 0.85rem 1rem;
+      font-size: 0.88rem;
+      color: #fbbf24;
+      margin: 1rem 0;
+    }
+    .tree { font-family: monospace; font-size: 0.8rem; color: var(--muted); line-height: 1.5; }
+    .tree .star { color: var(--amber); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Lab 24 — Production Eval + Guardrail Stack</h1>
+      <p>Xây dựng lớp đánh giá (evaluation) và bảo vệ (guardrail) cho RAG pipeline Day 18</p>
+      <div class="badge-row">
+        <span class="badge">⏱ 90 phút lab + 15 phút setup</span>
+        <span class="badge">📊 100 điểm + 10 bonus</span>
+        <span class="badge">🐍 Python 3.11+</span>
+        <span class="badge">🐳 Docker (Qdrant)</span>
+      </div>
+    </header>
+
+    <!-- MỤC TIÊU -->
+    <section>
+      <h2>🎯 Mục tiêu & Hướng làm</h2>
+      <div class="card highlight">
+        <p><strong style="color:var(--text)">Day 18</strong> = làm cho RAG <em>chạy được</em>.</p>
+        <p><strong style="color:var(--text)">Day 24</strong> = làm cho RAG <em>đáng tin cậy trong production</em>.</p>
+        <p style="margin-bottom:0">Bạn sẽ xây dựng <strong style="color:var(--text)">complete eval + guardrail stack</strong> gồm 3 phase, mỗi phase 30 phút, dựa trên pipeline RAG HR policy (25 tài liệu tiếng Việt) đã có từ Day 18.</p>
+      </div>
+    </section>
+
+    <!-- KIẾN TRÚC TỔNG THỂ -->
+    <section>
+      <h2>🏗 Kiến trúc tổng thể</h2>
+      <div class="flow">[Day 18 Pipeline — M1→M2→M3→GPT]
+        │
+        ├──► Phase A: RAGAS 50q ──────────► Biết pipeline YẾU ở đâu
+        │     (3 distributions)              → reports/ragas_50q.json
+        │
+        ├──► Phase B: LLM-as-Judge ───────► Đo độ tin cậy của eval
+        │     (pairwise + Cohen κ)           → reports/judge_results.json
+        │
+        └──► Phase C: NeMo Guardrails ────► Bảo vệ khỏi inputs độc hại
+              (Presidio PII + NeMo rails)    → reports/guard_results.json
+                                             → reports/blueprint.md</div>
+
+      <h3>Guard Stack (Phase C)</h3>
+      <div class="flow">User Input
+    │
+    ▼
+[Presidio PII Scan]     ← CCCD, SĐT VN, Email → block nếu có PII
+    │
+    ▼
+[NeMo Input Rail]       ← Jailbreak, off-topic, prompt injection
+    │
+    ▼
+[RAG Pipeline Day 18]   ← M1 Chunk → M2 Search → M3 Rerank → LLM
+    │
+    ▼
+[NeMo Output Rail]        ← Kiểm tra response trước khi trả user
+    │
+    ▼
+User Response</div>
+    </section>
+
+    <!-- WORKFLOW -->
+    <section>
+      <h2>🔄 Workflow — Thứ tự làm việc</h2>
+
+      <h3>Phase 0: Setup (15 phút — TRƯỚC khi tính giờ)</h3>
+      <ol class="steps">
+        <li><strong style="color:var(--text)">Copy code Day 18</strong> — Copy <code>m1–m5</code> + <code>pipeline.py</code> vào <code>src/</code>. Đặc biệt <code>m4_eval.py</code> phải có hàm <code>evaluate_ragas()</code>.</li>
+        <li><strong style="color:var(--text)">Khởi động môi trường</strong> — <code>docker compose up -d</code> (Qdrant), <code>pip install -r requirements.txt</code>, <code>python -m spacy download en_core_web_lg</code></li>
+        <li><strong style="color:var(--text)">Cấu hình API</strong> — Copy <code>.env.example</code> → <code>.env</code>, điền <code>OPENAI_API_KEY</code></li>
+        <li><strong style="color:var(--text)">Generate answers</strong> — <code>python setup_answers.py</code> (~5–10 phút) → tạo <code>answers_50q.json</code> (input cho Phase A)</li>
+      </ol>
+
+      <div class="warn">⚠️ Không có <code>answers_50q.json</code> → Phase A không chạy được → 0 điểm Phase A</div>
+
+      <h3>Phase A → B → C (mỗi phase ~30 phút)</h3>
+      <table>
+        <thead>
+          <tr><th>Phase</th><th>File implement</th><th>Lệnh chạy</th><th>Output</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong style="color:var(--accent)">A — RAGAS</strong></td>
+            <td><code>src/phase_a_ragas.py</code></td>
+            <td><code>python src/phase_a_ragas.py</code></td>
+            <td><code>reports/ragas_50q.json</code></td>
+          </tr>
+          <tr>
+            <td><strong style="color:var(--accent2)">B — Judge</strong></td>
+            <td><code>src/phase_b_judge.py</code></td>
+            <td><code>python src/phase_b_judge.py</code></td>
+            <td><code>reports/judge_results.json</code></td>
+          </tr>
+          <tr>
+            <td><strong style="color:var(--green)">C — Guard</strong></td>
+            <td><code>src/phase_c_guard.py</code></td>
+            <td><code>python src/phase_c_guard.py</code></td>
+            <td><code>reports/guard_results.json</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Nộp bài</h3>
+      <ol class="steps">
+        <li>Implement hết các hàm có <code># TODO</code> trong 3 file phase</li>
+        <li>Chạy <code>pytest tests/ -v</code> — tất cả pass</li>
+        <li>Điền <code>reports/blueprint.md</code>, <code>analysis/failure_clusters.md</code>, <code>analysis/bias_report.md</code></li>
+        <li>Chạy <code>python check_lab.py</code> — kiểm tra cuối</li>
+        <li>Push lên GitHub trước khi hết giờ</li>
+      </ol>
+    </section>
+
+    <!-- PHASE A -->
+    <section>
+      <h2>📊 Phase A — RAGAS Production Eval (30 điểm)</h2>
+      <div class="card phase-a">
+        <p><strong style="color:var(--text)">Mục đích:</strong> Chạy RAGAS trên 50 câu hỏi, phân tích điểm yếu pipeline theo distribution và metric.</p>
+      </div>
+
+      <h3>Test set — 3 distributions</h3>
+      <table>
+        <thead>
+          <tr><th>Distribution</th><th>Số câu</th><th>Đặc điểm</th><th>Ví dụ thách thức</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>factual</code></td><td>20</td>
+            <td>Tra cứu 1 tài liệu, câu hỏi thẳng</td>
+            <td>Chọn đúng phiên bản policy (v2023 vs v2024)</td>
+          </tr>
+          <tr>
+            <td><code>multi_hop</code></td><td>20</td>
+            <td>Kết hợp nhiều tài liệu, tính toán, suy luận</td>
+            <td>Tính lương thử việc, phí phạt tạm ứng, ngày phép tích lũy</td>
+          </tr>
+          <tr>
+            <td><code>adversarial</code></td><td>10</td>
+            <td>Bẫy version conflict, phủ định, mâu thuẫn</td>
+            <td>Hỏi policy cũ, "có nên tự xử lý không?", VPN cá nhân</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>4 RAGAS metrics (mỗi câu hỏi)</h3>
+      <table>
+        <thead>
+          <tr><th>Metric</th><th>Ý nghĩa</th><th>Gợi ý fix khi thấp</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>faithfulness</code></td><td>Answer có bám context không (hallucination?)</td><td>Tighten system prompt, giảm temperature</td></tr>
+          <tr><td><code>context_recall</code></td><td>Retrieval có lấy đủ chunk liên quan?</td><td>Cải thiện chunking hoặc thêm BM25</td></tr>
+          <tr><td><code>context_precision</code></td><td>Chunks retrieved có liên quan?</td><td>Thêm reranking hoặc metadata filter</td></tr>
+          <tr><td><code>answer_relevancy</code></td><td>Answer có trả lời đúng câu hỏi?</td><td>Cải thiện prompt template</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Tasks cần implement</h3>
+      <div class="task-grid">
+        <div class="task-item">
+          <span class="num">1</span>
+          <h4>group_by_distribution()</h4>
+          <p>Nhóm 50 câu theo <code>factual</code> / <code>multi_hop</code> / <code>adversarial</code>. Trả về dict 3 keys, đúng số lượng 20/20/10.</p>
+        </div>
+        <div class="task-item">
+          <span class="num">2</span>
+          <h4>run_ragas_50q()</h4>
+          <p>Gọi <code>evaluate_ragas()</code> từ <code>m4_eval.py</code> (Day 18) trên <code>answers_50q.json</code>. Trả về 50 <code>RagasResult</code>.</p>
+        </div>
+        <div class="task-item">
+          <span class="num">3</span>
+          <h4>bottom_10()</h4>
+          <p>Sort theo <code>avg_score</code> thấp nhất, lấy 10 câu tệ nhất. Mỗi item có: rank, diagnosis, suggested_fix (dùng <code>DIAGNOSTIC_TREE</code>).</p>
+        </div>
+        <div class="task-item">
+          <span class="num">4</span>
+          <h4>cluster_analysis()</h4>
+          <p>Matrix 4×3 (worst_metric × distribution). Tìm dominant failure distribution + metric + insight string.</p>
+        </div>
+      </div>
+      <p style="margin-top:0.75rem"><span class="status-todo">Bonus +4:</span> Adversarial avg_score &lt; factual avg_score</p>
+    </section>
+
+    <!-- PHASE B -->
+    <section>
+      <h2>⚖️ Phase B — LLM-as-Judge (35 điểm)</h2>
+      <div class="card phase-b">
+        <p><strong style="color:var(--text)">Mục đích:</strong> Dùng LLM đánh giá chất lượng answer, phát hiện bias, đo độ đồng thuận với nhãn con người (Cohen's κ).</p>
+      </div>
+
+      <h3>Tasks cần implement</h3>
+      <div class="task-grid">
+        <div class="task-item">
+          <span class="num">5</span>
+          <h4>pairwise_judge()</h4>
+          <p>Gọi LLM (gpt-4o-mini) so sánh answer A vs B theo 3 tiêu chí: accuracy, completeness, conciseness. Trả về winner (A/B/tie), reasoning, scores.</p>
+        </div>
+        <div class="task-item">
+          <span class="num">6</span>
+          <h4>swap_and_average()</h4>
+          <p>Chạy judge 2 lần (hoán đổi thứ tự A/B). Convert pass 2 về không gian gốc. Phát hiện position bias. Consensus → final_winner.</p>
+        </div>
+        <div class="task-item">
+          <span class="num">7</span>
+          <h4>cohen_kappa()</h4>
+          <p>So sánh judge labels vs 10 human labels trong <code>human_labels_10q.json</code>. Công thức: κ = (p_o − p_e) / (1 − p_e). Thang: &gt;0.6 = substantial.</p>
+        </div>
+        <div class="task-item">
+          <span class="num">8</span>
+          <h4>bias_report()</h4>
+          <p>Đo position_bias_rate (% inconsistent) và verbosity_bias (LLM ưu tiên answer dài hơn?). Trả về interpretation string.</p>
+        </div>
+      </div>
+      <p style="margin-top:0.75rem"><span class="status-todo">Bonus +3:</span> Cohen's κ &gt; 0.6</p>
+    </section>
+
+    <!-- PHASE C -->
+    <section>
+      <h2>🛡 Phase C — NeMo Guardrails (35 điểm)</h2>
+      <div class="card phase-c">
+        <p><strong style="color:var(--text)">Mục đích:</strong> Xây lớp bảo vệ nhiều tầng trước/sau RAG. Chặn PII, jailbreak, prompt injection. Đo latency P95.</p>
+      </div>
+
+      <h3>Đã có sẵn (không cần viết)</h3>
+      <ul>
+        <li><code>setup_presidio()</code> — Custom recognizers VN_CCCD, VN_PHONE</li>
+        <li><code>setup_nemo_rails()</code> — Load config từ <code>guardrails/config.yml</code> + <code>rails.co</code></li>
+      </ul>
+
+      <h3>Tasks cần implement</h3>
+      <div class="task-grid">
+        <div class="task-item">
+          <span class="num">9a</span>
+          <h4>pii_scan()</h4>
+          <p>Presidio: detect CCCD (12 số), SĐT VN (0[3-9]xxxxxxxx), Email. Anonymize text. Trả về has_pii, entities, anonymized.</p>
+        </div>
+        <div class="task-item">
+          <span class="num">9b</span>
+          <h4>check_input_rail()</h4>
+          <p>Async NeMo input rail. Block jailbreak/off-topic/injection. Trả về allowed, blocked_reason, response.</p>
+        </div>
+        <div class="task-item">
+          <span class="num">10</span>
+          <h4>run_adversarial_suite()</h4>
+          <p>Chạy 20 inputs từ <code>adversarial_set_20.json</code> qua full stack (Presidio → NeMo). So với expected blocked/allowed. Pass ≥ 15/20.</p>
+        </div>
+        <div class="task-item">
+          <span class="num">11</span>
+          <h4>check_output_rail()</h4>
+          <p>NeMo output rail: kiểm tra response có PII/sensitive content. Trả về safe, flagged_reason, final_answer.</p>
+        </div>
+        <div class="task-item">
+          <span class="num">12</span>
+          <h4>measure_p95_latency()</h4>
+          <p>Đo P50/P95/P99 cho Presidio và NeMo riêng. Budget: P95 total guard &lt; 500ms.</p>
+        </div>
+        <div class="task-item">
+          <span class="num">13</span>
+          <h4>blueprint.md</h4>
+          <p>Điền tay CI/CD blueprint: latency budget, CI gates, monitoring dashboard, kết quả thực tế từ lab.</p>
+        </div>
+      </div>
+      <p style="margin-top:0.75rem"><span class="status-todo">Bonus +3:</span> Adversarial pass rate ≥ 18/20 (90%)</p>
+
+      <h3>Adversarial categories (20 inputs)</h3>
+      <p>Các loại tấn công test guardrail: <code>pii_injection</code>, <code>jailbreak</code>, <code>off_topic</code>, <code>prompt_injection</code>, v.v. Có thể mở rộng <code>guardrails/rails.co</code> để cải thiện pass rate.</p>
+    </section>
+
+    <!-- CẤU TRÚC THƯ MỤC -->
+    <section>
+      <h2>📁 Cấu trúc thư mục quan trọng</h2>
+      <div class="card">
+        <div class="tree">Day24-Track3-Eval-Guard/
+├── src/
+│   ├── m1_chunking.py … m5_enrichment.py, pipeline.py  ← copy Day 18
+│   ├── phase_a_ragas.py    <span class="star">★ Tasks 1–4</span>
+│   ├── phase_b_judge.py    <span class="star">★ Tasks 5–8</span>
+│   └── phase_c_guard.py    <span class="star">★ Tasks 9–12</span>
+├── guardrails/
+│   ├── config.yml          ← NeMo config (có sẵn)
+│   └── rails.co            ← Colang flows (có thể mở rộng)
+├── data/                   ← 25 tài liệu HR policy tiếng Việt
+├── test_set_50q.json       ← 50 câu hỏi eval
+├── human_labels_10q.json   ← 10 nhãn người (Cohen κ)
+├── adversarial_set_20.json ← 20 inputs tấn công
+├── setup_answers.py        ← Pipeline → answers_50q.json
+├── check_lab.py            ← Kiểm tra trước nộp
+├── reports/
+│   ├── ragas_50q.json      ← auto Phase A
+│   ├── judge_results.json  ← auto Phase B
+│   ├── guard_results.json  ← auto Phase C
+│   └── blueprint.md        ← Task 13 (điền tay)
+└── analysis/
+    ├── failure_clusters.md   ← Phân tích bottom-10
+    └── bias_report.md      ← Phân tích bias judge</div>
+      </div>
+    </section>
+
+    <!-- ĐIỂM SỐ -->
+    <section>
+      <h2>🏆 Điểm số & Deliverables</h2>
+      <div class="score-bar"><span></span><span></span><span></span></div>
+      <div class="legend">
+        <span class="a">Phase A: 30đ</span>
+        <span class="b">Phase B: 35đ</span>
+        <span class="c">Phase C: 35đ</span>
+      </div>
+
+      <table style="margin-top:1.25rem">
+        <thead>
+          <tr><th>Deliverable</th><th>Mô tả</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>src/phase_a_ragas.py</code></td><td>Tasks 1–4 hoàn chỉnh, 0 TODO</td></tr>
+          <tr><td><code>src/phase_b_judge.py</code></td><td>Tasks 5–8 hoàn chỉnh, 0 TODO</td></tr>
+          <tr><td><code>src/phase_c_guard.py</code></td><td>Tasks 9–12 hoàn chỉnh, 0 TODO</td></tr>
+          <tr><td><code>reports/blueprint.md</code></td><td>CI/CD blueprint điền đầy đủ</td></tr>
+          <tr><td><code>analysis/failure_clusters.md</code></td><td>Phân tích Phase A</td></tr>
+          <tr><td><code>analysis/bias_report.md</code></td><td>Phân tích Phase B</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Trừ điểm</h3>
+      <table>
+        <thead><tr><th>Lỗi</th><th>Trừ</th></tr></thead>
+        <tbody>
+          <tr><td>Còn <code># TODO</code> trong phase_*.py</td><td>−5/module</td></tr>
+          <tr><td>Test fail</td><td>−3/test</td></tr>
+          <tr><td><code>blueprint.md</code> trống</td><td>−10</td></tr>
+          <tr><td>Không có <code>answers_50q.json</code></td><td>Phase A = 0</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- LỆNH THƯỜNG DÙNG -->
+    <section>
+      <h2>⌨️ Lệnh thường dùng</h2>
+      <div class="card">
+        <pre class="flow" style="margin:0"># Setup
+docker compose up -d
+pip install -r requirements.txt
+python -m spacy download en_core_web_lg
+cp .env.example .env          # điền OPENAI_API_KEY
+python setup_answers.py       # ~5-10 phút
+
+# Chạy từng phase
+python src/phase_a_ragas.py
+python src/phase_b_judge.py
+python src/phase_c_guard.py
+
+# Test
+pytest tests/ -v
+pytest tests/test_phase_a.py -v
+pytest tests/test_phase_b.py -v
+pytest tests/test_phase_c.py -v
+
+# Kiểm tra trước nộp
+python check_lab.py
+grep -r "# TODO" src/phase_*.py   # phải 0 kết quả</pre>
+      </div>
+    </section>
+
+    <!-- TÓM TẮT NHANH -->
+    <section>
+      <h2>💡 Tóm tắt nhanh — Bạn cần làm gì?</h2>
+      <div class="card highlight">
+        <ol style="color:var(--muted)">
+          <li><strong style="color:var(--text)">Setup:</strong> Copy Day 18 → chạy <code>setup_answers.py</code></li>
+          <li><strong style="color:var(--text)">Phase A:</strong> Implement 4 hàm RAGAS → biết pipeline yếu ở đâu</li>
+          <li><strong style="color:var(--text)">Phase B:</strong> Implement LLM judge + κ + bias → đo độ tin eval</li>
+          <li><strong style="color:var(--text)">Phase C:</strong> Implement Presidio + NeMo guard + latency → bảo vệ production</li>
+          <li><strong style="color:var(--text)">Phân tích:</strong> Điền blueprint + failure_clusters + bias_report</li>
+          <li><strong style="color:var(--text)">Verify:</strong> pytest pass + check_lab.py + push GitHub</li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- CẬP NHẬT TRIỂN KHAI -->
+    <section>
+      <h2>✅ Cập nhật mới trong project (đã làm thêm)</h2>
+      <div class="card highlight">
+        <p><strong style="color:var(--text)">Môi trường ảo:</strong> đã tạo thêm <code>.venv311</code> bằng Python 3.11 để tương thích bộ thư viện lab.</p>
+        <p style="margin-bottom:0"><strong style="color:var(--text)">Code:</strong> đã implement toàn bộ các hàm <code># TODO</code> trong 3 file phase và bổ sung fallback để chạy ổn định khi thiếu dịch vụ ngoài.</p>
+      </div>
+
+      <h3>Những file đã cập nhật</h3>
+      <table>
+        <thead>
+          <tr><th>File</th><th>Đã bổ sung gì</th><th>Chức năng</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>src/phase_a_ragas.py</code></td>
+            <td>Implement Tasks 1-4: group, chạy RAGAS, bottom-10, cluster analysis</td>
+            <td>Tạo report phân tích điểm yếu pipeline theo distribution + metric</td>
+          </tr>
+          <tr>
+            <td><code>src/phase_b_judge.py</code></td>
+            <td>Implement Tasks 5-8: pairwise judge, swap-and-average, Cohen's κ, bias report</td>
+            <td>Đánh giá chất lượng answer và đo bias của judge</td>
+          </tr>
+          <tr>
+            <td><code>src/phase_c_guard.py</code></td>
+            <td>Implement Tasks 9a-12 với fallback regex/rule-based nếu thiếu Presidio/NeMo</td>
+            <td>PII scan, input/output guard, adversarial suite, latency percentile</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Chi tiết chức năng vừa thêm</h3>
+      <ul>
+        <li><strong style="color:var(--text)">Phase A:</strong> Có fallback heuristic khi <code>evaluate_ragas()</code> chưa sẵn sàng, nên vẫn tạo được <code>RagasResult</code> để debug flow.</li>
+        <li><strong style="color:var(--text)">Phase B:</strong> Pairwise judge chạy deterministic (không phụ thuộc API), trả đủ <code>winner/reasoning/scores</code>, scores luôn trong [0,1].</li>
+        <li><strong style="color:var(--text)">Phase C:</strong> <code>pii_scan()</code> nhận diện CCCD/CMND/SĐT/Email ngay cả khi chưa cài Presidio (regex fallback).</li>
+        <li><strong style="color:var(--text)">Guard logic:</strong> Input rail có rule chặn jailbreak/off-topic/prompt-injection nếu chưa load được NeMo.</li>
+        <li><strong style="color:var(--text)">Latency:</strong> Trả đủ <code>p50/p95/p99</code> cho từng layer và cờ <code>latency_budget_ok</code>.</li>
+      </ul>
+    </section>
+
+    <!-- HƯỚNG DẪN CHẠY BÀI -->
+    <section>
+      <h2>🚀 Hướng dẫn chạy bài của bạn (end-to-end)</h2>
+      <div class="card">
+        <ol class="steps">
+          <li><strong style="color:var(--text)">Kích hoạt môi trường ảo:</strong><br><code>.\\.venv311\\Scripts\\Activate.ps1</code></li>
+          <li><strong style="color:var(--text)">Điền API key:</strong> copy <code>.env.example</code> thành <code>.env</code> và điền <code>OPENAI_API_KEY</code></li>
+          <li><strong style="color:var(--text)">Khởi động Qdrant:</strong><br><code>docker compose up -d</code></li>
+          <li><strong style="color:var(--text)">Generate answers:</strong><br><code>python setup_answers.py</code></li>
+          <li><strong style="color:var(--text)">Chạy từng phase:</strong><br><code>python src/phase_a_ragas.py</code><br><code>python src/phase_b_judge.py</code><br><code>python src/phase_c_guard.py</code></li>
+          <li><strong style="color:var(--text)">Chạy test:</strong><br><code>pytest tests/ -v</code></li>
+          <li><strong style="color:var(--text)">Final check:</strong><br><code>python check_lab.py</code></li>
+        </ol>
+      </div>
+
+      <div class="warn">
+        Nếu PowerShell chặn script activation, chạy tạm lệnh:
+        <code>Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass</code>
+        rồi activate lại venv.
+      </div>
+    </section>
+
+    <footer>
+      Lab 24 — Day24-Track3-Eval-Guard · Mở file này bằng trình duyệt để xem hướng dẫn
+    </footer>
+  </div>
+</body>
+</html>
